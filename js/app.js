@@ -32,12 +32,8 @@ let currentExerciseIndex = 0;
 let currentStepIndex = 0;     
 let currentRound = 1;
 const TOTAL_ROUNDS = 2;
-
-// 🎯 ตัวแปร Grace Period ป้องกันเวลารีเซ็ตเมื่อตัวสั่น
 let holdStartTime = null;
-let lastValidTime = null;
 const HOLD_DURATION = 15;
-const GRACE_PERIOD_MS = 1000; 
 
 let simulatedFSRRelaxed = false;
 let knownFaces = [];
@@ -161,7 +157,6 @@ async function processFaceScanRealtime() {
         detectedFaceBox = null;
         startPoseGamificationSession();
       }, 2500);
-
     } else {
       poseStatus.innerText = "🔍 กรุณามองตรงมาที่กล้องเพื่อระบุตัวตน...";
     }
@@ -192,7 +187,6 @@ function startPoseGamificationSession() {
   currentStepIndex = 0;
   currentRound = 1;
   holdStartTime = null;
-  lastValidTime = null;
   isPoseSessionActive = true;
   
   stepBadge.innerText = "STEP 2: MediaPipe Motion Engine";
@@ -214,7 +208,6 @@ function processPoseGamificationEngine(landmarks) {
   const visCheck = activeEx.checkVisibility(landmarks);
   if (!visCheck.ready) {
     holdStartTime = null;
-    lastValidTime = null;
     frameWarningBox.innerText = visCheck.errorMsg;
     frameWarningBox.style.display = "block";
     poseStatus.innerText = "⚠️ หลุดขอบเฟรม! สแกนท่าทางหยุดชั่วคราว";
@@ -226,17 +219,14 @@ function processPoseGamificationEngine(landmarks) {
     frameWarningBox.style.display = "none";
   }
 
-  // 2. Render Overlay (ส่ง canvasCtx, width, height เข้าไปวาด)
+  // 2. Render Overlay
   activeEx.renderSkeleton(landmarks, canvasCtx, canvasElement.width, canvasElement.height);
 
   // 3. Form Validation
   const form = activeEx.validateForm(landmarks, currentStepIndex, canvasElement.width, canvasElement.height);
 
   if (form.success) {
-    lastValidTime = currentTime;
-
     if (!holdStartTime) holdStartTime = currentTime;
-    
     const elapsed = Math.floor((currentTime - holdStartTime) / 1000);
     const remaining = HOLD_DURATION - elapsed;
 
@@ -253,7 +243,6 @@ function processPoseGamificationEngine(landmarks) {
       addScoreToActiveUser(setScore);
 
       holdStartTime = null;
-      lastValidTime = null;
       
       if (currentStepIndex < activeEx.steps.length - 1) {
         currentStepIndex++;
@@ -283,19 +272,12 @@ function processPoseGamificationEngine(landmarks) {
       timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
     }
   } else {
-    // 🎯 Grace Period: ถ้าหลุดเกณฑ์ขยับตัวสั้นๆ ไม่เกิน 1 วินาที จะไม่ล้างไทม์เมอร์นับใหม่
-    if (holdStartTime && lastValidTime && (currentTime - lastValidTime < GRACE_PERIOD_MS)) {
-      poseStatus.innerText = "⚠️ ท่าทางเริ่มหลุด! พยายามค้างท่าไว้...";
-      poseStatus.style.color = "#FF9100";
-    } else {
-      holdStartTime = null;
-      lastValidTime = null;
-      camScoreVal.innerText = "0% (ท่าทางยังไม่เข้าเกณฑ์)";
-      camScoreVal.style.color = "#FFD54F";
-      poseStatus.innerText = activeEx.steps[currentStepIndex].instruction;
-      poseStatus.style.color = "#FFD54F";
-      timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
-    }
+    holdStartTime = null;
+    camScoreVal.innerText = "0% (ท่าทางยังไม่เข้าเกณฑ์)";
+    camScoreVal.style.color = "#FFD54F";
+    poseStatus.innerText = activeEx.steps[currentStepIndex].instruction;
+    poseStatus.style.color = "#FFD54F";
+    timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
   }
 }
 
