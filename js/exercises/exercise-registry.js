@@ -1,3 +1,23 @@
+// 🎯 1. ประกาศ Helper Functions ด้านบนสุด ป้องกัน Scope Error 100%
+function drawLine(from, to, color, ctx, width, height) {
+  if (!from || !to || !ctx) return;
+  ctx.beginPath();
+  ctx.moveTo((1 - from.x) * width, from.y * height);
+  ctx.lineTo((1 - to.x) * width, to.y * height);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+}
+
+function drawPoint(lm, color, ctx, width, height) {
+  if (!lm || !ctx) return;
+  ctx.beginPath();
+  ctx.arc((1 - lm.x) * width, lm.y * height, 8, 0, 2 * Math.PI);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+// 🎯 2. คลังกฎท่าบริหาร
 const ExerciseRegistry = [
   // -----------------------------------------------------------------------
   // 🏋️ ท่าที่ 1: ยืดกล้ามเนื้อคอ (Neck Stretch)
@@ -85,10 +105,12 @@ const ExerciseRegistry = [
       document.getElementById('right-angle').innerText = "-";
 
       if (stepIdx === 0) {
+        // แขนขวาข้ามอกไปทางซ้ายมือผู้แสดง (Mirror View: rWrist.x < nose.x)
         const isArmUp = rElbow.y < (lShoulder.y + 0.25);
         const isCrossed = (rWrist.x < nose.x + 0.08) || (rWrist.x < rShoulder.x + 0.08);
         return { success: isArmUp && isCrossed };
       } else {
+        // แขนซ้ายข้ามอกไปทางขวามือผู้แสดง (Mirror View: lWrist.x > nose.x)
         const isArmUp = lElbow.y < (rShoulder.y + 0.25);
         const isCrossed = (lWrist.x > nose.x - 0.08) || (lWrist.x > lShoulder.x - 0.08);
         return { success: isArmUp && isCrossed };
@@ -96,21 +118,3 @@ const ExerciseRegistry = [
     }
   }
 ];
-
-function drawLine(from, to, color, ctx, width, height) {
-  if (!from || !to || !ctx) return;
-  ctx.beginPath();
-  ctx.moveTo((1 - from.x) * width, from.y * height);
-  ctx.lineTo((1 - to.x) * width, to.y * height);
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = color;
-  ctx.stroke();
-}
-
-function drawPoint(lm, color, ctx, width, height) {
-  if (!lm || !ctx) return;
-  ctx.beginPath();
-  ctx.arc((1 - lm.x) * width, lm.y * height, 8, 0, 2 * Math.PI);
-  ctx.fillStyle = color;
-  ctx.fill();
-}
