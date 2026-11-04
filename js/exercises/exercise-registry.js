@@ -105,23 +105,17 @@ const ExerciseRegistry = [
       document.getElementById('right-angle').innerText = "-";
 
       if (stepIdx === 0) {
-        // Step 0: ดึงแขนขวาข้ามอกไปทาง "ซ้ายมือของคุณ"
-        // 1. ความสูงศอกขวาไม่อยู่ต่ำเกินไป
+        // Step 0: ดึงแขนขวาข้ามอกไปทางซ้ายมือของผู้แสดง
         const isArmUp = rElbow.y < (lShoulder.y + 0.25);
-        
-        // 2. ข้อมือขวา (16) ถูกดึงไปทางซ้ายมือของคุณ 
-        //    (ใน Mirror View ค่า X จะเพิ่มขึ้นจนมากกว่าแนวกลางลำตัว/จมูก: rWrist.x > nose.x)
-        const isCrossed = (rWrist.x > nose.x - 0.08) || (rWrist.x > lShoulder.x - 0.08);
+        // ใน Mirror View: ข้อมือขวาต้องเคลือนไปฝั่งขวาของหน้าจอ (พิกัด X มากกว่า Nose)
+        const isCrossed = (rWrist.x > nose.x - 0.05);
 
         return { success: isArmUp && isCrossed };
       } else {
-        // Step 1: ดึงแขนซ้ายข้ามอกไปทาง "ขวามือของคุณ"
-        // 1. ความสูงศอกซ้ายไม่อยู่ต่ำเกินไป
+        // Step 1: ดึงแขนซ้ายข้ามอกไปทางขวามือของผู้แสดง
         const isArmUp = lElbow.y < (rShoulder.y + 0.25);
-        
-        // 2. ข้อมือซ้าย (15) ถูกดึงไปทางขวามือของคุณ 
-        //    (ใน Mirror View ค่า X จะลดลงจนน้อยกว่าแนวกลางลำตัว/จมูก: lWrist.x < nose.x)
-        const isCrossed = (lWrist.x < nose.x + 0.08) || (lWrist.x < rShoulder.x + 0.08);
+        // ใน Mirror View: ข้อมือซ้ายต้องเคลื่อนไปฝั่งซ้ายของหน้าจอ (พิกัด X น้อยกว่า Nose)
+        const isCrossed = (lWrist.x < nose.x + 0.05);
 
         return { success: isArmUp && isCrossed };
       }
