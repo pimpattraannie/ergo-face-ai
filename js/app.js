@@ -23,7 +23,7 @@ let currentSystemStep = 1;
 let isFaceScanFinished = false;
 let isPoseSessionActive = false;
 let isScanningInProgress = false;
-let isPoseProcessing = false; // 🎯 Flag ป้องกัน Async Loop ค้าง
+let isPoseProcessing = false; // ป้องกันคำสั่ง pose.send ชนกัน
 let lastScanTime = 0;
 let detectedFaceBox = null;
 let currentPoseLandmarks = null;
@@ -44,6 +44,12 @@ let knownFaces = [];
 let activeUser = null;
 let currentSessionScore = 0;
 
+// Temp Canvas สำหรับสแน็ปเฟรมส่ง MediaPipe ป้องกัน Stream Deadlock
+const poseSnapCanvas = document.createElement('canvas');
+poseSnapCanvas.width = 640;
+poseSnapCanvas.height = 480;
+const poseSnapCtx = poseSnapCanvas.getContext('2d');
+
 // --- MediaPipe Setup ---
 const pose = new Pose({
   locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
@@ -58,7 +64,7 @@ pose.setOptions({
 
 pose.onResults((results) => {
   currentPoseLandmarks = results.poseLandmarks || null;
-  isPoseProcessing = false; // 🎯 ปลดล็อค Flag เมื่อ MediaPipe ประมวลผลเสร็จ 1 เฟรม
+  isPoseProcessing = false; // ปลดล็อกเมื่อประมวลผลเสร็จ 1 เฟรม
 });
 
 window.addEventListener('load', async () => {
@@ -80,7 +86,9 @@ window.addEventListener('load', async () => {
 function startWebcam() {
   cameraUtils = new Camera(videoElement, {
     onFrame: async () => {
+      // 1. วาดวิดีโอลง Canvas หลักเป็นด่านแรก (กล้องจะไม่ค้างแน่นอน)
       drawFrame();
+      
       const now = Date.now();
       
       // Step 1: สแกนใบหน้า
@@ -89,11 +97,12 @@ function startWebcam() {
         processFaceScanRealtime();
       }
       
-      // Step 2: ประมวลผล MediaPipe Pose (ส่งภาพกล้องสด แต่บล็อกไม่ให้ส่งซ้อน)
+      // Step 2: ส่งเฟรมภาพสดไป MediaPipe Pose (ใช้วิธี Copy Bitmap ป้องกัน Resource Lock)
       if (currentSystemStep === 2 && isPoseSessionActive && !isPoseProcessing) {
         isPoseProcessing = true;
+        poseSnapCtx.drawImage(videoElement, 0, 0, 640, 480);
         try {
-          await pose.send({ image: videoElement });
+          await pose.send({ image: poseSnapCanvas });
         } catch (e) {
           isPoseProcessing = false;
         }
@@ -166,11 +175,12 @@ async function processFaceScanRealtime() {
       detectedFaceBox = { box: box, color: bgColor };
       isFaceScanFinished = true;
 
+      // ปลดซ่อนแท็กแล้วย้ายไป Step 2
       setTimeout(() => {
         faceLabelTag.style.display = "none";
         detectedFaceBox = null;
         startPoseGamificationSession();
-      }, 1500);
+      }, 1000);
 
     } else {
       poseStatus.innerText = "🔍 กรุณามองตรงมาที่กล้องเพื่อระบุตัวตน...";
@@ -203,6 +213,7 @@ function startPoseGamificationSession() {
   currentRound = 1;
   holdStartTime = null;
   lastValidTime = null;
+  isPoseProcessing = false;
   isPoseSessionActive = true;
   
   stepBadge.innerText = "STEP 2: MediaPipe Motion Engine";
@@ -236,7 +247,7 @@ function processPoseGamificationEngine(landmarks) {
     frameWarningBox.style.display = "none";
   }
 
-  // 2. Render Overlay (ส่ง Context และขนาด Canvas ป้องกัน Scope Error)
+  // 2. Render Overlay
   activeEx.renderSkeleton(landmarks, canvasCtx, canvasElement.width, canvasElement.height);
 
   // 3. Form Validation
