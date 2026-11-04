@@ -195,6 +195,10 @@ function startPoseGamificationSession() {
 }
 
 // 🕹️ CENTRAL MOTION GAMIFICATION ENGINE
+// Variable สำหรับจัดการ Grace Period (ผ่อนปรนการสั่น)
+let lastValidTime = null;
+const GRACE_PERIOD_MS = 1000; // ให้เวลาสั่น/หลุดเกณฑ์ได้ 1 วินาทีโดยไม่นับนึ่งใหม่
+
 function processPoseGamificationEngine(landmarks) {
   const currentTime = Date.now();
   const activeEx = ExerciseRegistry[currentExerciseIndex];
@@ -207,13 +211,12 @@ function processPoseGamificationEngine(landmarks) {
   // 1. Visibility Check
   const visCheck = activeEx.checkVisibility(landmarks);
   if (!visCheck.ready) {
-    holdStartTime = null;
+    // ถ้าอวัยวะหลุดเฟรมจริงๆ ให้หยุดเวลาไว้ชั่วคราว
     frameWarningBox.innerText = visCheck.errorMsg;
     frameWarningBox.style.display = "block";
     poseStatus.innerText = "⚠️ หลุดขอบเฟรม! สแกนท่าทางหยุดชั่วคราว";
     poseStatus.style.color = "#FF5252";
     camScoreVal.innerText = "0% (Out of Frame)";
-    timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
     return;
   } else {
     frameWarningBox.style.display = "none";
@@ -226,7 +229,11 @@ function processPoseGamificationEngine(landmarks) {
   const form = activeEx.validateForm(landmarks, currentStepIndex, canvasElement.width, canvasElement.height);
 
   if (form.success) {
+    lastValidTime = currentTime; // อัปเดตเวลาล่าสุดทำท่าถูกต้อง
+
     if (!holdStartTime) holdStartTime = currentTime;
+    
+    // คำนวณเวลาถอยหลัง
     const elapsed = Math.floor((currentTime - holdStartTime) / 1000);
     const remaining = HOLD_DURATION - elapsed;
 
@@ -238,11 +245,13 @@ function processPoseGamificationEngine(landmarks) {
       poseStatus.style.color = "#00E676";
       timerVal.innerText = `⏱️ ${remaining}`;
     } else {
+      // ทำครบ 15 วินาที
       let setScore = 50 + (simulatedFSRRelaxed ? 20 : 0);
       currentSessionScore += setScore;
       addScoreToActiveUser(setScore);
 
       holdStartTime = null;
+      lastValidTime = null;
       
       if (currentStepIndex < activeEx.steps.length - 1) {
         currentStepIndex++;
@@ -272,12 +281,20 @@ function processPoseGamificationEngine(landmarks) {
       timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
     }
   } else {
-    holdStartTime = null;
-    camScoreVal.innerText = "0% (ท่าทางยังไม่เข้าเกณฑ์)";
-    camScoreVal.style.color = "#FFD54F";
-    poseStatus.innerText = activeEx.steps[currentStepIndex].instruction;
-    poseStatus.style.color = "#FFD54F";
-    timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
+    // 🎯 ระบบผ่อนปรน (Grace Period): ถ้าหลุดเกณฑ์ชั่วคราว ให้รอ 1 วินาทีก่อนจะสั่ง Reset จริง
+    if (holdStartTime && lastValidTime && (currentTime - lastValidTime < GRACE_PERIOD_MS)) {
+      poseStatus.innerText = "⚠️ ท่าทางเริ่มหลุด! พยายามค้างท่าไว้...";
+      poseStatus.style.color = "#FF9100";
+    } else {
+      // หลุดเกณฑ์เกิน 1 วินาทีจริงๆ จึงค่อยสั่ง Reset ไทม์เมอร์
+      holdStartTime = null;
+      lastValidTime = null;
+      camScoreVal.innerText = "0% (ท่าทางยังไม่เข้าเกณฑ์)";
+      camScoreVal.style.color = "#FFD54F";
+      poseStatus.innerText = activeEx.steps[currentStepIndex].instruction;
+      poseStatus.style.color = "#FFD54F";
+      timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
+    }
   }
 }
 
