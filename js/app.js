@@ -23,6 +23,7 @@ let currentSystemStep = 1;
 let isFaceScanFinished = false;
 let isPoseSessionActive = false;
 let isScanningInProgress = false;
+let isPoseProcessing = false; // 🎯 Flag ป้องกัน Async Loop ค้าง
 let lastScanTime = 0;
 let detectedFaceBox = null;
 let currentPoseLandmarks = null;
@@ -32,8 +33,11 @@ let currentExerciseIndex = 0;
 let currentStepIndex = 0;     
 let currentRound = 1;
 const TOTAL_ROUNDS = 2;
+
 let holdStartTime = null;
+let lastValidTime = null;
 const HOLD_DURATION = 15;
+const GRACE_PERIOD_MS = 1000; 
 
 let simulatedFSRRelaxed = false;
 let knownFaces = [];
@@ -48,12 +52,13 @@ const pose = new Pose({
 pose.setOptions({
   modelComplexity: 1,
   smoothLandmarks: true,
-  minDetectionConfidence: 0.6,
-  minTrackingConfidence: 0.6
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
 });
 
 pose.onResults((results) => {
   currentPoseLandmarks = results.poseLandmarks || null;
+  isPoseProcessing = false; // 🎯 ปลดล็อค Flag เมื่อ MediaPipe ประมวลผลเสร็จ 1 เฟรม
 });
 
 window.addEventListener('load', async () => {
@@ -75,18 +80,23 @@ window.addEventListener('load', async () => {
 function startWebcam() {
   cameraUtils = new Camera(videoElement, {
     onFrame: async () => {
-      // 1. วาดเฟรมกล้องลง Canvas ก่อนเสมอ
       drawFrame();
-      
       const now = Date.now();
-      if (currentSystemStep === 1 && now - lastScanTime > 500) {
+      
+      // Step 1: สแกนใบหน้า
+      if (currentSystemStep === 1 && !isFaceScanFinished && now - lastScanTime > 500) {
         lastScanTime = now;
         processFaceScanRealtime();
       }
       
-      // 2. ส่ง canvasElement แทน videoElement เพื่อแก้ปัญหากล้องค้าง/Lock Stream 100%
-      if (currentSystemStep === 2 && isPoseSessionActive) {
-        await pose.send({ image: canvasElement });
+      // Step 2: ประมวลผล MediaPipe Pose (ส่งภาพกล้องสด แต่บล็อกไม่ให้ส่งซ้อน)
+      if (currentSystemStep === 2 && isPoseSessionActive && !isPoseProcessing) {
+        isPoseProcessing = true;
+        try {
+          await pose.send({ image: videoElement });
+        } catch (e) {
+          isPoseProcessing = false;
+        }
       }
     },
     width: 640, height: 480
@@ -160,7 +170,8 @@ async function processFaceScanRealtime() {
         faceLabelTag.style.display = "none";
         detectedFaceBox = null;
         startPoseGamificationSession();
-      }, 2500);
+      }, 1500);
+
     } else {
       poseStatus.innerText = "🔍 กรุณามองตรงมาที่กล้องเพื่อระบุตัวตน...";
     }
@@ -191,6 +202,7 @@ function startPoseGamificationSession() {
   currentStepIndex = 0;
   currentRound = 1;
   holdStartTime = null;
+  lastValidTime = null;
   isPoseSessionActive = true;
   
   stepBadge.innerText = "STEP 2: MediaPipe Motion Engine";
@@ -212,6 +224,7 @@ function processPoseGamificationEngine(landmarks) {
   const visCheck = activeEx.checkVisibility(landmarks);
   if (!visCheck.ready) {
     holdStartTime = null;
+    lastValidTime = null;
     frameWarningBox.innerText = visCheck.errorMsg;
     frameWarningBox.style.display = "block";
     poseStatus.innerText = "⚠️ หลุดขอบเฟรม! สแกนท่าทางหยุดชั่วคราว";
@@ -223,14 +236,17 @@ function processPoseGamificationEngine(landmarks) {
     frameWarningBox.style.display = "none";
   }
 
-  // 2. Render Overlay
+  // 2. Render Overlay (ส่ง Context และขนาด Canvas ป้องกัน Scope Error)
   activeEx.renderSkeleton(landmarks, canvasCtx, canvasElement.width, canvasElement.height);
 
   // 3. Form Validation
   const form = activeEx.validateForm(landmarks, currentStepIndex, canvasElement.width, canvasElement.height);
 
   if (form.success) {
+    lastValidTime = currentTime;
+
     if (!holdStartTime) holdStartTime = currentTime;
+    
     const elapsed = Math.floor((currentTime - holdStartTime) / 1000);
     const remaining = HOLD_DURATION - elapsed;
 
@@ -247,6 +263,7 @@ function processPoseGamificationEngine(landmarks) {
       addScoreToActiveUser(setScore);
 
       holdStartTime = null;
+      lastValidTime = null;
       
       if (currentStepIndex < activeEx.steps.length - 1) {
         currentStepIndex++;
@@ -276,18 +293,24 @@ function processPoseGamificationEngine(landmarks) {
       timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
     }
   } else {
-    holdStartTime = null;
-    camScoreVal.innerText = "0% (ท่าทางยังไม่เข้าเกณฑ์)";
-    camScoreVal.style.color = "#FFD54F";
-    poseStatus.innerText = activeEx.steps[currentStepIndex].instruction;
-    poseStatus.style.color = "#FFD54F";
-    timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
+    if (holdStartTime && lastValidTime && (currentTime - lastValidTime < GRACE_PERIOD_MS)) {
+      poseStatus.innerText = "⚠️ ท่าทางเริ่มหลุด! พยายามค้างท่าไว้...";
+      poseStatus.style.color = "#FF9100";
+    } else {
+      holdStartTime = null;
+      lastValidTime = null;
+      camScoreVal.innerText = "0% (ท่าทางยังไม่เข้าเกณฑ์)";
+      camScoreVal.style.color = "#FFD54F";
+      poseStatus.innerText = activeEx.steps[currentStepIndex].instruction;
+      poseStatus.style.color = "#FFD54F";
+      timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
+    }
   }
 }
 
 function triggerIntervention() {
   currentSystemStep = 1; currentExerciseIndex = 0; currentStepIndex = 0; currentRound = 1;
-  isFaceScanFinished = false; isPoseSessionActive = false; isScanningInProgress = false;
+  isFaceScanFinished = false; isPoseSessionActive = false; isScanningInProgress = false; isPoseProcessing = false;
   detectedFaceBox = null; currentPoseLandmarks = null;
   faceLabelTag.style.display = "none"; summaryBox.style.display = "none"; frameWarningBox.style.display = "none";
   currentSessionScore = 0;
