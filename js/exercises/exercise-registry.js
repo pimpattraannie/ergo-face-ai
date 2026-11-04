@@ -64,14 +64,14 @@ const ExerciseRegistry = [
   },
 
   // -----------------------------------------------------------------------
-  // 🏋️ ท่าที่ 2: ยืดไหล่ข้ามอก (Cross-Body Stretch - Strict Ergonomic Check)
+  // 🏋️ ท่าที่ 2: ยืดไหล่ข้ามอก (Cross-Body Stretch - Biometric Angle Feedback)
   // -----------------------------------------------------------------------
   {
     id: 2,
     title: "ท่าที่ 2: ยืดไหล่ข้ามอก (Cross-Body Stretch)",
     steps: [
-      { instruction: "1. ดึงแขนขวาข้ามอกไปทางซ้ายสุดๆ แล้วใช้แขนซ้ายล็อคดันไว้" },
-      { instruction: "2. ดึงแขนซ้ายข้ามอกไปทางขวาสุดๆ แล้วใช้แขนขวาล็อคดันไว้" }
+      { instruction: "1. ดึงแขนขวาข้ามอกไปทางซ้าย ให้มุมยืดเกิน 55° (ค้างไว้ 15 วินาที)" },
+      { instruction: "2. ดึงแขนซ้ายข้ามอกไปทางขวา ให้มุมยืดเกิน 55° (ค้างไว้ 15 วินาที)" }
     ],
     checkVisibility: function(lm) {
       const rWrist = lm[16], lWrist = lm[15], rElbow = lm[14], lElbow = lm[13];
@@ -95,40 +95,65 @@ const ExerciseRegistry = [
       drawLine(lm[12], lm[14], '#29B6F6', ctx, width, height); 
       drawLine(lm[14], lm[16], '#FF9100', ctx, width, height);
     },
-    validateForm: function(lm, stepIdx) {
+    validateForm: function(lm, stepIdx, width, height) {
       const rWrist = lm[16], lWrist = lm[15];
       const rElbow = lm[14], lElbow = lm[13];
       const lShoulder = lm[11], rShoulder = lm[12];
 
-      document.getElementById('left-angle').innerText = "-"; 
-      document.getElementById('right-angle').innerText = "-";
+      // แปลงพิกัดเป็น Pixel
+      const rWx = rWrist.x * width, rWy = rWrist.y * height;
+      const lWx = lWrist.x * width, lWy = lWrist.y * height;
+      const rSx = rShoulder.x * width, rSy = rShoulder.y * height;
+      const lSx = lShoulder.x * width, lSy = lShoulder.y * height;
 
       if (stepIdx === 0) {
-        // --- Step 0: ดึงแขนขวาข้ามอกไปทางซ้ายมือ ---
-        // 1. ศอกขวาตั้งอยู่ในระดับอก (ไม่อยู่ต่ำตกขอบล่าง)
-        const isArmUp = rElbow.y < (lShoulder.y + 0.20);
+        // --- Step 0: ดึงแขนขวาข้ามอกไปทางซ้าย ---
+        // คำนวณมุมการเหยียดข้ามอกของแขนขวาเทียบกับแนวไหล่ขวา (Vector Angle)
+        const dx = rWx - rSx; // ระยะดึงข้ามอกแนวแกน X (ใน Mirror View ดึงไปทางซ้ายมือ ค่า Pixel จะเพิ่มขึ้น)
+        const dy = Math.abs(rWy - rSy);
+        
+        let stretchAngle = 0;
+        if (dx > 0) {
+          // คำนวณมุมการยืดแขนข้ามอก (0° ถึง ~85°)
+          stretchAngle = Math.round(Math.atan2(dx, dy + 1) * (180 / Math.PI));
+          stretchAngle = Math.min(85, Math.max(0, stretchAngle));
+        }
 
-        // 2. ข้อมือขวา (16) ต้องถูกดันยืดข้ามไปจนถึงขอบไหล่ซ้าย (11) (ยืดเส้นจริง)
-        // (ใน Mirror View: ทิศซ้ายมือของผู้แสดงคือฝั่งขวาของ Canvas ดังนั้น rWrist.x ต้อง > lShoulder.x - 0.05)
-        const isStretchedDeep = (rWrist.x >= lShoulder.x - 0.05);
+        // แสดงผลตัวเลของศาบน UI
+        document.getElementById('right-angle').innerText = stretchAngle;
+        document.getElementById('left-angle').innerText = "0";
 
-        // 3. ศอกซ้าย (แขนที่ล็อค) ต้องถูกยกขึ้นมาประคองไว้
+        // เกณฑ์ผ่าน:
+        // 1. มุมยืดข้ามอกต้องได้ >= 55°
+        // 2. แขนซ้ายยกขึ้นประคองล็อคไว้
+        const isArmUp = rElbow.y < (lShoulder.y + 0.22);
         const isLockArmUp = lElbow.y < (lShoulder.y + 0.30);
+        const isDeepStretch = stretchAngle >= 55;
 
-        return { success: isArmUp && isStretchedDeep && isLockArmUp };
+        return { success: isArmUp && isLockArmUp && isDeepStretch };
+
       } else {
-        // --- Step 1: ดึงแขนซ้ายข้ามอกไปทางขวามือ ---
-        // 1. ศอกซ้ายตั้งอยู่ในระดับอก
-        const isArmUp = lElbow.y < (rShoulder.y + 0.20);
+        // --- Step 1: ดึงแขนซ้ายข้ามอกไปทางขวา ---
+        // คำนวณมุมการเหยียดข้ามอกของแขนซ้ายเทียบกับแนวไหล่ซ้าย
+        const dx = lSx - lWx; // ใน Mirror View ดึงไปทางขวามือ ค่า Pixel ข้อมือจะน้อยกว่าไหล่ซ้าย
+        const dy = Math.abs(lWy - lSy);
+        
+        let stretchAngle = 0;
+        if (dx > 0) {
+          stretchAngle = Math.round(Math.atan2(dx, dy + 1) * (180 / Math.PI));
+          stretchAngle = Math.min(85, Math.max(0, stretchAngle));
+        }
 
-        // 2. ข้อมือซ้าย (15) ต้องถูกดันยืดข้ามไปจนถึงขอบไหล่ขวา (12) (ยืดเส้นจริง)
-        // (ใน Mirror View: ทิศขวามือของผู้แสดงคือฝั่งซ้ายของ Canvas ดังนั้น lWrist.x ต้อง <= rShoulder.x + 0.05)
-        const isStretchedDeep = (lWrist.x <= rShoulder.x + 0.05);
+        // แสดงผลตัวเลของศาบน UI
+        document.getElementById('left-angle').innerText = stretchAngle;
+        document.getElementById('right-angle').innerText = "0";
 
-        // 3. ศอกขวา (แขนที่ล็อค) ต้องถูกยกขึ้นมาประคองไว้
+        // เกณฑ์ผ่าน: มุมยืดข้ามอกต้องได้ >= 55°
+        const isArmUp = lElbow.y < (rShoulder.y + 0.22);
         const isLockArmUp = rElbow.y < (rShoulder.y + 0.30);
+        const isDeepStretch = stretchAngle >= 55;
 
-        return { success: isArmUp && isStretchedDeep && isLockArmUp };
+        return { success: isArmUp && isLockArmUp && isDeepStretch };
       }
     }
   }
