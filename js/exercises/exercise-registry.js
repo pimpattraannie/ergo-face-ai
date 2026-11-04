@@ -58,11 +58,10 @@ const ExerciseRegistry = [
       { instruction: "1. ดึงแขนขวาข้ามอกไปทางซ้าย แล้วใช้แขนซ้ายล็อคดันไว้" },
       { instruction: "2. ดึงแขนซ้ายข้ามอกไปทางขวา แล้วใช้แขนขวาล็อคดันไว้" }
     ],
-    // 🎯 VISIBILITY GUARD: เช็กอวัยวะหลุดเฟรมล่าง
     checkVisibility: function(lm) {
       const rWrist = lm[16], lWrist = lm[15], rElbow = lm[14], lElbow = lm[13];
-      const isWristVisible = (rWrist && rWrist.visibility > 0.65 && lWrist && lWrist.visibility > 0.65);
-      const isElbowVisible = (rElbow && rElbow.visibility > 0.65 && lElbow && lElbow.visibility > 0.65);
+      const isWristVisible = (rWrist && rWrist.visibility > 0.55 && lWrist && lWrist.visibility > 0.55);
+      const isElbowVisible = (rElbow && rElbow.visibility > 0.55 && lElbow && lElbow.visibility > 0.55);
 
       if (!isWristVisible || !isElbowVisible) {
         return { ready: false, errorMsg: "⚠️ มองไม่เห็นมือ/แขน! กรุณาถอยห่างจากกล้องให้เห็นช่วงลำตัวถึงมือชัดเจน" };
@@ -91,19 +90,27 @@ const ExerciseRegistry = [
       document.getElementById('right-angle').innerText = "-";
 
       if (stepIdx === 0) {
-        // Step 0: ดึงแขนขวาข้ามอกไปทางซ้าย (ใน Mirror View: x ของข้อมือขวาต้องน้อยกว่า nose.x)
-        const isArmUp = rElbow.y < (lShoulder.y + 0.15);
-        const isCrossed = rWrist.x < nose.x;
+        // Step 0: ดึงแขนขวาข้ามอกไปทางซ้ายมือของคุณ
+        // 1. ระดับศอกขวาไม่ตกต่ำเกินไป (อยู่ในช่วงระดับอก)
+        const isArmUp = rElbow.y < (lShoulder.y + 0.25);
+        
+        // 2. ข้อมือขวา (16) ถูกดึงข้ามแนวกลางลำตัว (Nose) ไปทางซ้ายมือของคุณ (ขวาของหน้าจอ: rWrist.x > nose.x)
+        //    หรือดึงข้ามไปใกล้ตำแหน่งไหล่ซ้าย (11)
+        const isCrossed = (rWrist.x > nose.x - 0.05) || (rWrist.x > lShoulder.x - 0.05);
+
         return { success: isArmUp && isCrossed };
       } else {
-        // Step 1: ดึงแขนซ้ายข้ามอกไปทางขวา (ใน Mirror View: x ของข้อมือซ้ายต้องมากกว่า nose.x)
-        const isArmUp = lElbow.y < (rShoulder.y + 0.15);
-        const isCrossed = lWrist.x > nose.x;
+        // Step 1: ดึงแขนซ้ายข้ามอกไปทางขวามือของคุณ
+        // 1. ระดับศอกซ้ายอยู่ในช่วงระดับอก
+        const isArmUp = lElbow.y < (rShoulder.y + 0.25);
+        
+        // 2. ข้อมือซ้าย (15) ถูกดึงข้ามแนวกลางลำตัวไปทางขวามือของคุณ (ซ้ายของหน้าจอ: lWrist.x < nose.x)
+        const isCrossed = (lWrist.x < nose.x + 0.05) || (lWrist.x < rShoulder.x + 0.05);
+
         return { success: isArmUp && isCrossed };
       }
     }
   }
-];
 
 // Helper Functions สำหรับวาดบน Canvas
 function drawLine(from, to, color, ctx, width, height) {
