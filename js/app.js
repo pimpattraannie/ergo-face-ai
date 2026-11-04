@@ -75,14 +75,18 @@ window.addEventListener('load', async () => {
 function startWebcam() {
   cameraUtils = new Camera(videoElement, {
     onFrame: async () => {
+      // 1. วาดเฟรมกล้องลง Canvas ก่อนเสมอ
       drawFrame();
+      
       const now = Date.now();
       if (currentSystemStep === 1 && now - lastScanTime > 500) {
         lastScanTime = now;
         processFaceScanRealtime();
       }
+      
+      // 2. ส่ง canvasElement แทน videoElement เพื่อแก้ปัญหากล้องค้าง/Lock Stream 100%
       if (currentSystemStep === 2 && isPoseSessionActive) {
-        await pose.send({ image: videoElement });
+        await pose.send({ image: canvasElement });
       }
     },
     width: 640, height: 480
