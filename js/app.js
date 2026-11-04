@@ -33,7 +33,9 @@ let currentStepIndex = 0;
 let currentRound = 1;
 const TOTAL_ROUNDS = 2;
 let holdStartTime = null;
+let lastValidTime = null;
 const HOLD_DURATION = 15;
+const GRACE_PERIOD_MS = 1000; 
 
 let simulatedFSRRelaxed = false;
 let knownFaces = [];
@@ -48,8 +50,8 @@ const pose = new Pose({
 pose.setOptions({
   modelComplexity: 1,
   smoothLandmarks: true,
-  minDetectionConfidence: 0.6,
-  minTrackingConfidence: 0.6
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
 });
 
 pose.onResults((results) => {
@@ -77,11 +79,15 @@ function startWebcam() {
     onFrame: async () => {
       drawFrame();
       const now = Date.now();
+      
+      // Step 1: สแกนใบหน้า
       if (currentSystemStep === 1 && now - lastScanTime > 500) {
         lastScanTime = now;
         processFaceScanRealtime();
       }
-      if (currentSystemStep === 2 && isPoseSessionActive) {
+      
+      // Step 2: ตรวจจับท่าทาง (ส่งภาพให้ MediaPipe Pose เสมอเมื่ออยู่ Step 2)
+      if (currentSystemStep === 2) {
         await pose.send({ image: videoElement });
       }
     },
@@ -105,7 +111,7 @@ function drawFrame() {
     canvasCtx.strokeRect(mirroredX, detectedFaceBox.box.y, detectedFaceBox.box.width, detectedFaceBox.box.height);
   }
 
-  if (currentSystemStep === 2 && currentPoseLandmarks) {
+  if (currentSystemStep === 2 && currentPoseLandmarks && isPoseSessionActive) {
     processPoseGamificationEngine(currentPoseLandmarks);
   }
 }
@@ -152,10 +158,9 @@ async function processFaceScanRealtime() {
       detectedFaceBox = { box: box, color: bgColor };
       isFaceScanFinished = true;
 
-      // 🎯 แก้ไข: สั่งเปิดเซสชัน MediaPipe Pose ทันที เพื่อไม่ให้กล้องหยุดทำงาน
+      // สลับหน้าเข้าสู่การจับท่าบริหารทันที
       startPoseGamificationSession();
 
-      // ซ่อนป้ายแท็กใบหน้าหลังผ่านไป 2.5 วินาทีตามปกติ
       setTimeout(() => {
         faceLabelTag.style.display = "none";
         detectedFaceBox = null;
@@ -168,8 +173,25 @@ async function processFaceScanRealtime() {
   finally { isScanningInProgress = false; }
 }
 
+function showHTMLLabel(box, color, text) {
+  const mirroredX = canvasElement.width - box.x - box.width;
+  faceLabelTag.style.background = color;
+  faceLabelTag.style.left = `${mirroredX}px`;
+  faceLabelTag.style.top = `${Math.max(box.y - 40, 10)}px`;
+  faceLabelTag.innerText = text;
+  faceLabelTag.style.display = "block";
+}
+
+function fallbackDefaultUser(reason) {
+  isFaceScanFinished = true;
+  activeUser = { id: "User_001", name: "คุณ (User_001)", score: 0 };
+  userDisplayName.innerText = activeUser.name;
+  userRegType.innerText = reason;
+  startPoseGamificationSession();
+}
+
 function startPoseGamificationSession() {
-  currentSystemStep = 2; // ย้ายเข้า STEP 2 ทันที กล้องจะไมล๊อคหรือค้าง
+  currentSystemStep = 2;
   currentExerciseIndex = 0;
   currentStepIndex = 0;
   currentRound = 1;
@@ -183,10 +205,6 @@ function startPoseGamificationSession() {
 }
 
 // 🕹️ CENTRAL MOTION GAMIFICATION ENGINE
-// Variable สำหรับจัดการ Grace Period (ผ่อนปรนการสั่น)
-let lastValidTime = null;
-const GRACE_PERIOD_MS = 1000; // ให้เวลาสั่น/หลุดเกณฑ์ได้ 1 วินาทีโดยไม่นับนึ่งใหม่
-
 function processPoseGamificationEngine(landmarks) {
   const currentTime = Date.now();
   const activeEx = ExerciseRegistry[currentExerciseIndex];
@@ -199,12 +217,12 @@ function processPoseGamificationEngine(landmarks) {
   // 1. Visibility Check
   const visCheck = activeEx.checkVisibility(landmarks);
   if (!visCheck.ready) {
-    // ถ้าอวัยวะหลุดเฟรมจริงๆ ให้หยุดเวลาไว้ชั่วคราว
     frameWarningBox.innerText = visCheck.errorMsg;
     frameWarningBox.style.display = "block";
     poseStatus.innerText = "⚠️ หลุดขอบเฟรม! สแกนท่าทางหยุดชั่วคราว";
     poseStatus.style.color = "#FF5252";
     camScoreVal.innerText = "0% (Out of Frame)";
+    holdStartTime = null;
     return;
   } else {
     frameWarningBox.style.display = "none";
@@ -217,11 +235,10 @@ function processPoseGamificationEngine(landmarks) {
   const form = activeEx.validateForm(landmarks, currentStepIndex, canvasElement.width, canvasElement.height);
 
   if (form.success) {
-    lastValidTime = currentTime; // อัปเดตเวลาล่าสุดทำท่าถูกต้อง
+    lastValidTime = currentTime;
 
     if (!holdStartTime) holdStartTime = currentTime;
     
-    // คำนวณเวลาถอยหลัง
     const elapsed = Math.floor((currentTime - holdStartTime) / 1000);
     const remaining = HOLD_DURATION - elapsed;
 
@@ -233,7 +250,6 @@ function processPoseGamificationEngine(landmarks) {
       poseStatus.style.color = "#00E676";
       timerVal.innerText = `⏱️ ${remaining}`;
     } else {
-      // ทำครบ 15 วินาที
       let setScore = 50 + (simulatedFSRRelaxed ? 20 : 0);
       currentSessionScore += setScore;
       addScoreToActiveUser(setScore);
@@ -269,12 +285,10 @@ function processPoseGamificationEngine(landmarks) {
       timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
     }
   } else {
-    // 🎯 ระบบผ่อนปรน (Grace Period): ถ้าหลุดเกณฑ์ชั่วคราว ให้รอ 1 วินาทีก่อนจะสั่ง Reset จริง
     if (holdStartTime && lastValidTime && (currentTime - lastValidTime < GRACE_PERIOD_MS)) {
       poseStatus.innerText = "⚠️ ท่าทางเริ่มหลุด! พยายามค้างท่าไว้...";
       poseStatus.style.color = "#FF9100";
     } else {
-      // หลุดเกณฑ์เกิน 1 วินาทีจริงๆ จึงค่อยสั่ง Reset ไทม์เมอร์
       holdStartTime = null;
       lastValidTime = null;
       camScoreVal.innerText = "0% (ท่าทางยังไม่เข้าเกณฑ์)";
