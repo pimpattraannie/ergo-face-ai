@@ -1,7 +1,3 @@
-/**
- * Exercise Registry - คลังมอดูลท่าบริหาร (Decoupled & Modular Structure)
- * ท่าใหม่ๆ (3 ถึง 9) จะถูกเพิ่มใน Array นี้โดยไม่กระทบ Core Engine
- */
 const ExerciseRegistry = [
   // -----------------------------------------------------------------------
   // 🏋️ ท่าที่ 1: ยืดกล้ามเนื้อคอ (Neck Stretch)
@@ -15,24 +11,23 @@ const ExerciseRegistry = [
     ],
     checkVisibility: function(lm) {
       const lEar = lm[7], rEar = lm[8], lSh = lm[11], rSh = lm[12];
-      const ok = (lEar && lEar.visibility > 0.5 && rEar && rEar.visibility > 0.5 &&
-                  lSh && lSh.visibility > 0.5 && rSh && rSh.visibility > 0.5);
+      const ok = (lEar && lEar.visibility > 0.4 && rEar && rEar.visibility > 0.4 &&
+                  lSh && lSh.visibility > 0.4 && rSh && rSh.visibility > 0.4);
       return { ready: ok, errorMsg: "⚠️ ไม่เห็นตำแหน่งหูหรือไหล่ชัดเจน" };
     },
-    renderSkeleton: function(lm, canvasCtx, width, height) {
-      drawLine(lm[7], lm[11], '#FF3D00', canvasCtx, width, height);
-      drawLine(lm[8], lm[12], '#FF9100', canvasCtx, width, height);
-      drawLine(lm[11], lm[12], '#00E676', canvasCtx, width, height);
-      drawPoint(lm[7], '#FF3D00', canvasCtx, width, height); 
-      drawPoint(lm[8], '#FF9100', canvasCtx, width, height);
-      drawPoint(lm[11], '#00E676', canvasCtx, width, height); 
-      drawPoint(lm[12], '#29B6F6', canvasCtx, width, height);
+    renderSkeleton: function(lm, ctx, width, height) {
+      drawLine(lm[7], lm[11], '#FF3D00', ctx, width, height);
+      drawLine(lm[8], lm[12], '#FF9100', ctx, width, height);
+      drawLine(lm[11], lm[12], '#00E676', ctx, width, height);
+      drawPoint(lm[7], '#FF3D00', ctx, width, height); 
+      drawPoint(lm[8], '#FF9100', ctx, width, height);
+      drawPoint(lm[11], '#00E676', ctx, width, height); 
+      drawPoint(lm[12], '#29B6F6', ctx, width, height);
     },
-    validateForm: function(lm, stepIdx, canvasWidth, canvasHeight) {
-      // 🎯 สรีระจริง: 2 = ตาซ้าย, 5 = ตาขวา
+    validateForm: function(lm, stepIdx, width, height) {
       const lEye = lm[2], rEye = lm[5];
-      const lx = lEye.x * canvasWidth, ly = lEye.y * canvasHeight;
-      const rx = rEye.x * canvasWidth, ry = rEye.y * canvasHeight;
+      const lx = lEye.x * width, ly = lEye.y * height;
+      const rx = rEye.x * width, ry = rEye.y * height;
       
       const dx = Math.abs(lx - rx), dy = Math.abs(ly - ry);
       const angleDeg = Math.round(Math.atan2(dy, dx) * (180 / Math.PI));
@@ -60,7 +55,6 @@ const ExerciseRegistry = [
     ],
     checkVisibility: function(lm) {
       const rWrist = lm[16], lWrist = lm[15], rElbow = lm[14], lElbow = lm[13];
-      // ผ่อนปรนเกณฑ์ Visibility ลงเหลือ 0.45 ป้องกันเวลาสั่นแล้วเตือนหลุดเฟรมบ่อย
       const isWristVisible = (rWrist && rWrist.visibility > 0.45 && lWrist && lWrist.visibility > 0.45);
       const isElbowVisible = (rElbow && rElbow.visibility > 0.45 && lElbow && lElbow.visibility > 0.45);
 
@@ -69,17 +63,17 @@ const ExerciseRegistry = [
       }
       return { ready: true, errorMsg: "" };
     },
-    renderSkeleton: function(lm, canvasCtx, width, height) {
-      drawPoint(lm[11], '#00E676', canvasCtx, width, height); 
-      drawPoint(lm[12], '#29B6F6', canvasCtx, width, height);
-      drawPoint(lm[13], '#FFD54F', canvasCtx, width, height); 
-      drawPoint(lm[14], '#FFD54F', canvasCtx, width, height);
-      drawPoint(lm[15], '#FF3D00', canvasCtx, width, height); 
-      drawPoint(lm[16], '#FF9100', canvasCtx, width, height);
-      drawLine(lm[11], lm[13], '#00E676', canvasCtx, width, height); 
-      drawLine(lm[13], lm[15], '#FF3D00', canvasCtx, width, height);
-      drawLine(lm[12], lm[14], '#29B6F6', canvasCtx, width, height); 
-      drawLine(lm[14], lm[16], '#FF9100', canvasCtx, width, height);
+    renderSkeleton: function(lm, ctx, width, height) {
+      drawPoint(lm[11], '#00E676', ctx, width, height); 
+      drawPoint(lm[12], '#29B6F6', ctx, width, height);
+      drawPoint(lm[13], '#FFD54F', ctx, width, height); 
+      drawPoint(lm[14], '#FFD54F', ctx, width, height);
+      drawPoint(lm[15], '#FF3D00', ctx, width, height); 
+      drawPoint(lm[16], '#FF9100', ctx, width, height);
+      drawLine(lm[11], lm[13], '#00E676', ctx, width, height); 
+      drawLine(lm[13], lm[15], '#FF3D00', ctx, width, height);
+      drawLine(lm[12], lm[14], '#29B6F6', ctx, width, height); 
+      drawLine(lm[14], lm[16], '#FF9100', ctx, width, height);
     },
     validateForm: function(lm, stepIdx) {
       const rWrist = lm[16], lWrist = lm[15];
@@ -91,25 +85,20 @@ const ExerciseRegistry = [
       document.getElementById('right-angle').innerText = "-";
 
       if (stepIdx === 0) {
-        // Step 0: แขนขวาข้ามอกไปทางซ้ายมือผู้แสดง
-        // ใน Mirror View: ข้อมือขวา (16) จะเคลื่อนไปทางซ้ายหน้าจอ (rWrist.x < nose.x + offset)
-        const isArmUp = rElbow.y < (lShoulder.y + 0.30); // เพิ่มระยะผ่อนปรนความสูงศอก
+        const isArmUp = rElbow.y < (lShoulder.y + 0.25);
         const isCrossed = (rWrist.x < nose.x + 0.08) || (rWrist.x < rShoulder.x + 0.08);
-
         return { success: isArmUp && isCrossed };
       } else {
-        // Step 1: แขนซ้ายข้ามอกไปทางขวามือผู้แสดง
-        // ใน Mirror View: ข้อมือซ้าย (15) จะเคลื่อนไปทางขวาหน้าจอ (lWrist.x > nose.x - offset)
-        const isArmUp = lElbow.y < (rShoulder.y + 0.30);
+        const isArmUp = lElbow.y < (rShoulder.y + 0.25);
         const isCrossed = (lWrist.x > nose.x - 0.08) || (lWrist.x > lShoulder.x - 0.08);
-
         return { success: isArmUp && isCrossed };
       }
     }
-  } 
-// Helper Functions สำหรับวาดบน Canvas
+  }
+];
+
 function drawLine(from, to, color, ctx, width, height) {
-  if (!from || !to) return;
+  if (!from || !to || !ctx) return;
   ctx.beginPath();
   ctx.moveTo((1 - from.x) * width, from.y * height);
   ctx.lineTo((1 - to.x) * width, to.y * height);
@@ -119,7 +108,7 @@ function drawLine(from, to, color, ctx, width, height) {
 }
 
 function drawPoint(lm, color, ctx, width, height) {
-  if (!lm) return;
+  if (!lm || !ctx) return;
   ctx.beginPath();
   ctx.arc((1 - lm.x) * width, lm.y * height, 8, 0, 2 * Math.PI);
   ctx.fillStyle = color;
