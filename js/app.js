@@ -20,14 +20,13 @@ const summaryDetail = document.getElementById('summary-detail');
 
 let isFaceModelsLoaded = false;
 let currentSystemStep = 1;     
-let isFaceScanFinished = false;
-let isPoseSessionActive = false;
+let isScanningActive = true;   // Flag คุมการสแกนหน้า
 let isScanningInProgress = false;
-let isPoseProcessing = false; // กันคำสั่ง pose.send ซ้อนกัน
 let lastScanTime = 0;
 let detectedFaceBox = null;
 let currentPoseLandmarks = null;
 let cameraUtils = null;
+let isPoseProcessing = false;
 
 let currentExerciseIndex = 0;
 let currentStepIndex = 0;     
@@ -43,7 +42,7 @@ let knownFaces = [];
 let activeUser = null;
 let currentSessionScore = 0;
 
-// Offscreen Temp Canvas สำหรับส่งเฟรมกล้องให้ MediaPipe Pose ป้องกัน Resource Locking
+// Offscreen Temp Canvas
 const offscreenCanvas = document.createElement('canvas');
 offscreenCanvas.width = 640;
 offscreenCanvas.height = 480;
@@ -63,7 +62,7 @@ pose.setOptions({
 
 pose.onResults((results) => {
   currentPoseLandmarks = results.poseLandmarks || null;
-  isPoseProcessing = false; // ปลดล็อคเมื่อประมวลผลเสร็จ 1 เฟรม
+  isPoseProcessing = false;
 });
 
 window.addEventListener('load', async () => {
@@ -85,25 +84,24 @@ window.addEventListener('load', async () => {
 function startWebcam() {
   cameraUtils = new Camera(videoElement, {
     onFrame: async () => {
-      // 1. วาดกล้องลง Main Canvas เสมอ (กล้องจะไม่ค้างชัวร์)
+      // 1. วาดวิดีโอสดลง Canvas หลักตลอดเวลา (กล้องจะไม่ค้างแน่นอน)
       drawFrame();
       
       const now = Date.now();
       
-      // Step 1: สแกนใบหน้า
-      if (currentSystemStep === 1 && !isFaceScanFinished && now - lastScanTime > 500) {
+      // STEP 1: รันการสแกนหน้าเฉพาะช่วงที่ยังสแกนไม่เสร็จ
+      if (currentSystemStep === 1 && isScanningActive && now - lastScanTime > 600) {
         lastScanTime = now;
         processFaceScanRealtime();
       }
       
-      // Step 2: สแน็ปภาพส่งไปให้ MediaPipe Pose (ไม่ดึงตรงจาก videoElement ป้องกันการแย่งกันใช้งาน)
-      if (currentSystemStep === 2 && isPoseSessionActive && !isPoseProcessing) {
+      // STEP 2: เมื่อเข้า Step 2 ให้รันเฉพาะ MediaPipe Pose เท่านั้น
+      if (currentSystemStep === 2 && !isPoseProcessing) {
         isPoseProcessing = true;
         offscreenCtx.drawImage(videoElement, 0, 0, 640, 480);
         try {
           await pose.send({ image: offscreenCanvas });
         } catch (err) {
-          console.error("MediaPipe Pose Error:", err);
           isPoseProcessing = false;
         }
       }
@@ -121,22 +119,22 @@ function drawFrame() {
   canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
   canvasCtx.restore();
 
-  // วาดกรอบสแกนหน้า
-  if (detectedFaceBox) {
+  // วาดกรอบสแกนหน้าเฉพาะช่วงที่กำลังสแกน
+  if (currentSystemStep === 1 && detectedFaceBox) {
     const mirroredX = canvasElement.width - detectedFaceBox.box.x - detectedFaceBox.box.width;
     canvasCtx.strokeStyle = detectedFaceBox.color;
     canvasCtx.lineWidth = 4;
     canvasCtx.strokeRect(mirroredX, detectedFaceBox.box.y, detectedFaceBox.box.width, detectedFaceBox.box.height);
   }
 
-  // วาด Pose Skeleton บน Canvas
-  if (currentSystemStep === 2 && currentPoseLandmarks && isPoseSessionActive) {
+  // วาด Skeleton เมื่ออยู่ Step 2
+  if (currentSystemStep === 2 && currentPoseLandmarks) {
     processPoseGamificationEngine(currentPoseLandmarks);
   }
 }
 
 async function processFaceScanRealtime() {
-  if (isFaceScanFinished || isScanningInProgress) return;
+  if (!isScanningActive || isScanningInProgress) return;
   if (!isFaceModelsLoaded) { fallbackDefaultUser("Guest Profile"); return; }
   isScanningInProgress = true;
 
@@ -175,14 +173,15 @@ async function processFaceScanRealtime() {
 
       showHTMLLabel(box, bgColor, labelText);
       detectedFaceBox = { box: box, color: bgColor };
-      isFaceScanFinished = true;
+      
+      // 🎯 ตัดกระบวนการสแกนหน้าทันที เพื่อปลดปล่อยระบบให้ MediaPipe Pose
+      isScanningActive = false;
 
-      // 🎯 สลับไปโหมดสแกนท่าทางหลังจากแสดงป้ายชื่อ 1.2 วินาที
       setTimeout(() => {
         faceLabelTag.style.display = "none";
         detectedFaceBox = null;
         startPoseGamificationSession();
-      }, 1200);
+      }, 1000);
 
     } else {
       poseStatus.innerText = "🔍 กรุณามองตรงมาที่กล้องเพื่อระบุตัวตน...";
@@ -204,7 +203,7 @@ function showHTMLLabel(box, color, text) {
 }
 
 function fallbackDefaultUser(reason) {
-  isFaceScanFinished = true;
+  isScanningActive = false;
   activeUser = { id: "User_001", name: "คุณ (User_001)", score: 0 };
   userDisplayName.innerText = activeUser.name;
   userRegType.innerText = reason;
@@ -212,13 +211,12 @@ function fallbackDefaultUser(reason) {
 }
 
 function startPoseGamificationSession() {
-  currentSystemStep = 2;
+  currentSystemStep = 2; // สลับเป็น Step 2
   currentExerciseIndex = 0;
   currentStepIndex = 0;
   currentRound = 1;
   holdStartTime = null;
   lastValidTime = null;
-  isPoseSessionActive = true;
   
   stepBadge.innerText = "STEP 2: MediaPipe Motion Engine";
   stepBadge.style.background = "#00E676";
@@ -294,7 +292,6 @@ function processPoseGamificationEngine(landmarks) {
             poseStatus.innerText = `🎉 ยอดเยี่ยม! บันทึกคะแนนรวม ${currentSessionScore} XP เรียบร้อยแล้ว`;
             poseStatus.style.color = "#00E676";
             timerVal.innerText = "✅ สำเร็จ";
-            isPoseSessionActive = false;
             
             sessionPts.innerText = `+${currentSessionScore}`;
             summaryDetail.innerText = `ทำครบทุกท่าบริหารเรียบร้อย ${simulatedFSRRelaxed ? '+ โบนัสเซนเซอร์ FSR คลายแรงกด' : ''}`;
@@ -323,7 +320,7 @@ function processPoseGamificationEngine(landmarks) {
 
 function triggerIntervention() {
   currentSystemStep = 1; currentExerciseIndex = 0; currentStepIndex = 0; currentRound = 1;
-  isFaceScanFinished = false; isPoseSessionActive = false; isScanningInProgress = false; isPoseProcessing = false;
+  isScanningActive = true; isScanningInProgress = false; isPoseProcessing = false;
   detectedFaceBox = null; currentPoseLandmarks = null;
   faceLabelTag.style.display = "none"; summaryBox.style.display = "none"; frameWarningBox.style.display = "none";
   currentSessionScore = 0;
