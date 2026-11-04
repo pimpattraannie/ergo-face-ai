@@ -1,4 +1,4 @@
-// 🎯 1. ประกาศ Helper Functions ด้านบนสุด ป้องกัน Scope Error 100%
+//  1. ประกาศ Helper Functions ด้านบนสุด ป้องกัน Scope Error 100%
 function drawLine(from, to, color, ctx, width, height) {
   if (!from || !to || !ctx) return;
   ctx.beginPath();
@@ -64,7 +64,7 @@ const ExerciseRegistry = [
   },
 
   // -----------------------------------------------------------------------
-  // 🏋️ ท่าที่ 2: ยืดไหล่ข้ามอก (Cross-Body Stretch - Biometric Angle Feedback)
+  //  ท่าที่ 2: ยืดไหล่ข้ามอก (Cross-Body Stretch - Biometric Angle Feedback)
   // -----------------------------------------------------------------------
   {
     id: 2,
