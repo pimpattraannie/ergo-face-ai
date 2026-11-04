@@ -80,15 +80,19 @@ function startWebcam() {
       drawFrame();
       const now = Date.now();
       
-      // Step 1: สแกนใบหน้า
+      // STEP 1: สแกนใบหน้า
       if (currentSystemStep === 1 && !isFaceScanFinished && now - lastScanTime > 500) {
         lastScanTime = now;
         processFaceScanRealtime();
       }
       
-      // Step 2: ตรวจจับท่าทาง (ส่งภาพให้ MediaPipe Pose เสมอเมื่ออยู่ Step 2)
-      if (currentSystemStep === 2) {
-        await pose.send({ image: videoElement });
+      // STEP 2: ส่งเฟรมกล้องไปประมวลผล Pose (ป้องกัน Crash ด้วย try...catch)
+      if (currentSystemStep === 2 && isPoseSessionActive) {
+        try {
+          await pose.send({ image: videoElement });
+        } catch (err) {
+          console.error("MediaPipe Pose Send Error:", err);
+        }
       }
     },
     width: 640, height: 480
@@ -104,6 +108,7 @@ function drawFrame() {
   canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
   canvasCtx.restore();
 
+  // วาดกรอบใบหน้าตอนสแกน
   if (detectedFaceBox) {
     const mirroredX = canvasElement.width - detectedFaceBox.box.x - detectedFaceBox.box.width;
     canvasCtx.strokeStyle = detectedFaceBox.color;
@@ -111,8 +116,8 @@ function drawFrame() {
     canvasCtx.strokeRect(mirroredX, detectedFaceBox.box.y, detectedFaceBox.box.width, detectedFaceBox.box.height);
   }
 
-  // วาด Pose Landmark ทันทีถ้าเข้า Step 2 แล้ว
-  if (currentSystemStep === 2 && currentPoseLandmarks) {
+  // วาด Pose Skeleton ทันทีที่ขยับเข้า Step 2
+  if (currentSystemStep === 2 && currentPoseLandmarks && isPoseSessionActive) {
     processPoseGamificationEngine(currentPoseLandmarks);
   }
 }
@@ -159,19 +164,21 @@ async function processFaceScanRealtime() {
       detectedFaceBox = { box: box, color: bgColor };
       isFaceScanFinished = true;
 
-      // 🎯 บังคับเปลี่ยนเข้าสู่ STEP 2 ทันทีตรงนี้เลย!
-      startPoseGamificationSession();
-
+      // ซ่อนป้าย Face ID แล้วเปลี่ยนไปรัน Pose Engine
       setTimeout(() => {
         faceLabelTag.style.display = "none";
         detectedFaceBox = null;
-      }, 2500);
+        startPoseGamificationSession();
+      }, 1500);
 
     } else {
       poseStatus.innerText = "🔍 กรุณามองตรงมาที่กล้องเพื่อระบุตัวตน...";
     }
-  } catch (e) { console.error(e); } 
-  finally { isScanningInProgress = false; }
+  } catch (e) { 
+    console.error(e); 
+  } finally { 
+    isScanningInProgress = false; 
+  }
 }
 
 function showHTMLLabel(box, color, text) {
@@ -192,7 +199,7 @@ function fallbackDefaultUser(reason) {
 }
 
 function startPoseGamificationSession() {
-  currentSystemStep = 2; // สลับระบบเข้าสู่ Step 2
+  currentSystemStep = 2;
   currentExerciseIndex = 0;
   currentStepIndex = 0;
   currentRound = 1;
@@ -200,7 +207,6 @@ function startPoseGamificationSession() {
   lastValidTime = null;
   isPoseSessionActive = true;
   
-  // 🎯 บังคับอัปเดตป้าย UI ให้เป็นสีเขียว STEP 2
   stepBadge.innerText = "STEP 2: MediaPipe Motion Engine";
   stepBadge.style.background = "#00E676";
   timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
