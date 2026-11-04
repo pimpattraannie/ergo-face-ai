@@ -81,7 +81,7 @@ function startWebcam() {
       const now = Date.now();
       
       // Step 1: สแกนใบหน้า
-      if (currentSystemStep === 1 && now - lastScanTime > 500) {
+      if (currentSystemStep === 1 && !isFaceScanFinished && now - lastScanTime > 500) {
         lastScanTime = now;
         processFaceScanRealtime();
       }
@@ -111,7 +111,8 @@ function drawFrame() {
     canvasCtx.strokeRect(mirroredX, detectedFaceBox.box.y, detectedFaceBox.box.width, detectedFaceBox.box.height);
   }
 
-  if (currentSystemStep === 2 && currentPoseLandmarks && isPoseSessionActive) {
+  // วาด Pose Landmark ทันทีถ้าเข้า Step 2 แล้ว
+  if (currentSystemStep === 2 && currentPoseLandmarks) {
     processPoseGamificationEngine(currentPoseLandmarks);
   }
 }
@@ -158,7 +159,7 @@ async function processFaceScanRealtime() {
       detectedFaceBox = { box: box, color: bgColor };
       isFaceScanFinished = true;
 
-      // สลับหน้าเข้าสู่การจับท่าบริหารทันที
+      // 🎯 บังคับเปลี่ยนเข้าสู่ STEP 2 ทันทีตรงนี้เลย!
       startPoseGamificationSession();
 
       setTimeout(() => {
@@ -191,7 +192,7 @@ function fallbackDefaultUser(reason) {
 }
 
 function startPoseGamificationSession() {
-  currentSystemStep = 2;
+  currentSystemStep = 2; // สลับระบบเข้าสู่ Step 2
   currentExerciseIndex = 0;
   currentStepIndex = 0;
   currentRound = 1;
@@ -199,6 +200,7 @@ function startPoseGamificationSession() {
   lastValidTime = null;
   isPoseSessionActive = true;
   
+  // 🎯 บังคับอัปเดตป้าย UI ให้เป็นสีเขียว STEP 2
   stepBadge.innerText = "STEP 2: MediaPipe Motion Engine";
   stepBadge.style.background = "#00E676";
   timerVal.innerText = `⏱️ ${HOLD_DURATION}`;
