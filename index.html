@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ErgoFaceAI - Node 4 Smart Intervention Hub</title>
+  
+  <!-- MediaPipe & Face-API Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #FFFFFF; margin: 0; padding: 20px; }
+    h1 { color: #00E676; margin-bottom: 5px; }
+    .main-grid { display: grid; grid-template-columns: 1fr 360px; gap: 20px; max-width: 1240px; margin: 0 auto; }
+    .game-section { background: #1E1E1E; padding: 15px; border-radius: 12px; text-align: center; }
+    .sidebar { display: flex; flex-direction: column; gap: 15px; }
+    .card { background: #1E1E1E; padding: 15px; border-radius: 12px; border: 1px solid #333; }
+    .card h3 { color: #29B6F6; margin-top: 0; }
+    .canvas-wrapper { position: relative; display: inline-block; width: 640px; height: 480px; max-width: 100%; }
+    #webcam { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    canvas { border: 3px solid #00E676; border-radius: 12px; width: 100%; height: 100%; }
+    .face-html-label { position: absolute; display: none; padding: 6px 12px; border-radius: 6px; font-size: 16px; font-weight: bold; color: #121212; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 10; white-space: nowrap; pointer-events: none; }
+    .score-board { font-size: 20px; background: #2A2A2A; padding: 12px; border-radius: 8px; margin-bottom: 10px; }
+    .status { color: #FFD54F; font-weight: bold; }
+    .timer { font-size: 34px; color: #00E676; font-weight: bold; margin-top: 4px; }
+    .sensor-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+    .badge-ok { background: #1b5e20; color: #81c784; }
+    .badge-warn { background: #b71c1c; color: #e57373; }
+    button { background: #00E676; color: #121212; border: none; padding: 10px 15px; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 6px; }
+    button:hover { background: #00B0FF; color: #FFF; }
+    .step-indicator { display: inline-block; padding: 4px 14px; border-radius: 12px; font-size: 14px; font-weight: bold; background: #FF9100; color: #121212; margin-bottom: 8px; }
+    .session-summary-box { background: #2A2A2A; border: 2px solid #00E676; border-radius: 10px; padding: 15px; margin-top: 15px; display: none; }
+    
+    .frame-warn-box {
+      display: none; background: rgba(211, 47, 47, 0.85); color: white;
+      padding: 10px; border-radius: 8px; font-size: 16px; font-weight: bold;
+      margin-bottom: 10px; border: 1px solid #FF5252;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>ErgoFaceAI Hub</h1>
+  <p>Node 4: Interactive Gamification Engine with Visual Face-ID & Multi-Node Sensor Sync</p>
+
+  <div class="main-grid">
+    <div class="game-section">
+      <div id="frame-warning" class="frame-warn-box">⚠️ กรุณาถอยห่างจากกล้อง ให้เห็นมือและแขนชัดเจน</div>
+
+      <div class="score-board">
+        <div class="step-indicator" id="step-badge">STEP 1: Face ID Scanning</div>
+        <div id="ex-name" style="color: #00E676; font-weight: bold; font-size: 20px; margin-top: 4px;">ท่าที่ 1: ยืดกล้ามเนื้อคอ</div>
+        <div id="round-val" style="color: #29B6F6;">รอบที่ 1 / 2</div>
+        <div>สถานะ: <span id="pose-status" class="status">กำลังเริ่มต้นระบบและเปิดกล้อง...</span></div>
+        <div class="timer" id="timer-val">⏱️ 15</div>
+        <div style="font-size: 14px; color: #aaa; margin-top: 5px;">
+          มุมเอียงซ้ายจริง: <span id="left-angle">0</span>° | มุมเอียงขวาจริง: <span id="right-angle">0</span>°
+        </div>
+      </div>
+
+      <div class="canvas-wrapper">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="output_canvas" width="640" height="480"></canvas>
+        <div id="face-label-tag" class="face-html-label"></div>
+      </div>
+
+      <div id="summary-box" class="session-summary-box">
+        <h3 style="color: #00E676; margin-top: 0;">🎉 สรุปผลคะแนนรอบนี้ (Session Summary)</h3>
+        <p style="font-size: 18px; margin: 5px 0;">คะแนนที่ได้ในรอบนี้: <b id="session-pts" style="color: #FFD54F; font-size: 26px;">+0</b> XP</p>
+        <p style="font-size: 14px; color: #bbb; margin-bottom: 5px;" id="summary-detail"></p>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="card">
+        <h3>👤 Active User Profile</h3>
+        <div>ชื่อผู้ใช้: <b id="user-display-name" style="color: #29B6F6;">กำลังสแกนใบหน้า...</b></div>
+        <div>สถานะโปรไฟล์: <span id="user-reg-type" style="color: #aaa;">-</span></div>
+        <div style="margin-top: 8px;">คะแนนสะสมรวม: <b id="total-score-val" style="color: #00E676;">0</b> XP</div>
+        <button onclick="clearFaceDatabase()" style="background: #D32F2F; color: white; margin-top: 10px;">🗑️ ล้างฐานข้อมูลใบหน้า</button>
+      </div>
+
+      <div class="card">
+        <h3>📡 Hardware Nodes Status</h3>
+        <p>Node 1 (Seat FSR): <span id="node1-status" class="sensor-badge badge-warn">Stagnant (นั่งนาน)</span></p>
+        <p>Node 2 (Wearable IMU): <span id="node2-status" class="sensor-badge badge-ok">Connected</span></p>
+        <p>Node 3 (Relief Actuator): <span id="node3-status" class="sensor-badge badge-ok">Ready</span></p>
+        
+        <hr style="border-color: #444;">
+        <p style="font-size: 13px; color: #bbb; margin-bottom: 5px;">🛠️ <b>IoT Signal Simulator</b></p>
+        <button id="btn-trigger" onclick="triggerIntervention()">⚡ 1. รีสตาร์ทสแกนหน้าใหม่ (Simulate Node 1)</button>
+        <button onclick="toggleFSRRelaxation()" style="background: #FF9100; color: white;">🔄 2. จำลองค่า FSR คลายแรงกด (+Bonus)</button>
+      </div>
+
+      <div class="card">
+        <h3>📊 Real-time Hybrid Score</h3>
+        <div>Camera Accuracy: <b id="cam-score">0%</b></div>
+        <div>Sensor Relaxation: <b id="sensor-score" style="color: #aaa;">Off</b></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🎯 สั่งโหลดไฟล์ตามลำดับ: สคริปต์ Registry ต้องมาก่อน App.js -->
+  <script src="js/exercises/exercise-registry.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
